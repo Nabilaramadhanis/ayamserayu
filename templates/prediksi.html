@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-header">
+  <h2>⚙️ Proses Prediksi</h2>
+  <p>Konfigurasi model untuk prediksi penjualan <strong>Makanan</strong> dan <strong>Minuman</strong> secara terpisah</p>
+</div>
+
+{% if error %}
+<div class="alert alert-error">⚠️ {{ error }}</div>
+{% endif %}
+
+<div class="dashboard-grid">
+  <div class="panel">
+    <div class="panel-header"><span class="dot dot-green"></span><strong>Konfigurasi Model</strong></div>
+    <form method="POST" action="{{ url_for('run_prediksi') }}" enctype="multipart/form-data" id="predForm">
+
+      <!-- Sumber Data -->
+      <div class="config-section">
+        <h4 class="config-label">📂 Sumber Data</h4>
+        <div class="radio-group">
+          <label class="radio-option">
+            <input type="radio" name="source" value="db" checked onchange="toggleSource(this)"/>
+            <span class="radio-box"></span> Gunakan data dari database (input manual)
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="source" value="csv" onchange="toggleSource(this)"/>
+            <span class="radio-box"></span> Upload file CSV POS Pawoon
+          </label>
+        </div>
+        <div id="csv-area" style="display:none;margin-top:12px">
+          <div class="upload-zone" onclick="document.getElementById('pred-csv').click()">
+            <div class="upload-icon">📂</div>
+            <p>Klik untuk pilih file CSV</p>
+            <input type="file" name="csv_file" id="pred-csv" accept=".csv" class="upload-file-input"
+                   onchange="document.getElementById('pred-fn').textContent=this.files[0]?.name||''"/>
+            <span class="upload-file-name" id="pred-fn">Belum ada file dipilih</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Size -->
+      <div class="config-section">
+        <h4 class="config-label">📊 Ukuran Data Testing</h4>
+        <input type="range" id="tsSlider" min="10" max="40" value="20" step="5" class="slider"
+               oninput="tsVal.textContent=this.value+'%';tsHid.value=(this.value/100).toFixed(2)"/>
+        <div class="slider-labels"><span>10%</span><span>20%</span><span>30%</span><span>40%</span></div>
+        <div class="slider-current">Nilai: <strong id="tsVal">20%</strong></div>
+        <input type="hidden" name="test_size" id="tsHid" value="0.20"/>
+      </div>
+
+      <!-- N Estimators -->
+      <div class="config-section">
+        <h4 class="config-label">🌳 Jumlah Pohon Random Forest (n_estimators)</h4>
+        <input type="range" id="nEstSlider" min="10" max="200" value="100" step="10" class="slider"
+               oninput="nEstVal.textContent=this.value+' pohon';nEstHid.value=this.value"/>
+        <div class="slider-labels"><span>10</span><span>50</span><span>100</span><span>150</span><span>200</span></div>
+        <div class="slider-current">Nilai: <strong id="nEstVal">100 pohon</strong></div>
+        <input type="hidden" name="n_estimators" id="nEstHid" value="100"/>
+      </div>
+
+      <!-- Info -->
+      <div class="info-box" style="margin-bottom:14px">
+        <h4>🎯 Yang Akan Diprediksi Secara Terpisah:</h4>
+        <div style="display:flex;gap:12px;margin-top:10px;flex-wrap:wrap">
+          <div class="kat-badge-info makanan-info">
+            🍗 <strong>Makanan</strong><br>
+            <small>Model LR & RF terpisah</small>
+          </div>
+          <div class="kat-badge-info minuman-info">
+            🥤 <strong>Minuman</strong><br>
+            <small>Model LR & RF terpisah</small>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-green btn-lg" id="runBtn">🚀 Jalankan Prediksi</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><span class="dot dot-orange"></span><strong>Alur CRISP-DM</strong></div>
+    <div class="crisp-steps">
+      <div class="crisp-step done"><div class="step-num">1</div><div><strong>Business Understanding</strong><br>Prediksi penjualan Makanan & Minuman</div></div>
+      <div class="crisp-step done"><div class="step-num">2</div><div><strong>Data Understanding</strong><br>Eksplorasi data POS Pawoon per kategori</div></div>
+      <div class="crisp-step done"><div class="step-num">3</div><div><strong>Data Preparation</strong><br>Agregasi harian per kategori + feature engineering</div></div>
+      <div class="crisp-step active"><div class="step-num">4</div><div><strong>Modeling</strong><br>LR & RF — dilatih per kategori (Makanan / Minuman)</div></div>
+      <div class="crisp-step active"><div class="step-num">5</div><div><strong>Evaluation</strong><br>MAE & RMSE per kategori, pilih model terbaik</div></div>
+      <div class="crisp-step"><div class="step-num">6</div><div><strong>Deployment</strong><br>Tampilkan & export hasil per kategori</div></div>
+    </div>
+
+    <hr class="divider"/>
+    <div class="info-box">
+      <h4>📌 11 Fitur Input (per kategori):</h4>
+      <div class="feature-tags" style="margin-top:8px">
+        <span class="ftag ftag-temporal">hari_ke</span>
+        <span class="ftag ftag-temporal">hari_dalam_minggu</span>
+        <span class="ftag ftag-temporal">hari_dalam_bulan</span>
+        <span class="ftag ftag-temporal">bulan</span>
+        <span class="ftag ftag-temporal">minggu_ke</span>
+        <span class="ftag ftag-lag">lag_1</span>
+        <span class="ftag ftag-lag">lag_2</span>
+        <span class="ftag ftag-lag">lag_3</span>
+        <span class="ftag ftag-lag">lag_7</span>
+        <span class="ftag ftag-ma">rata_rata_3hari</span>
+        <span class="ftag ftag-ma">rata_rata_7hari</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSource(el) {
+  document.getElementById('csv-area').style.display = el.value==='csv' ? 'block' : 'none';
+}
+document.getElementById('predForm').addEventListener('submit', function() {
+  const btn = document.getElementById('runBtn');
+  btn.textContent = '⏳ Memproses Makanan & Minuman...';
+  btn.disabled = true;
+});
+</script>
+{% endblock %}

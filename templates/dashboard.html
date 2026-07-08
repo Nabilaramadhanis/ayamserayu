@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<!-- STAT CARDS -->
+<div class="stat-cards">
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue">📋</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Data</div>
+      <div class="stat-value">{{ total }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#FFF3E0;font-size:26px">🍗</div>
+    <div class="stat-body">
+      <div class="stat-label">Data Makanan</div>
+      <div class="stat-value">{{ makanan }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#E3F2FD;font-size:26px">🥤</div>
+    <div class="stat-body">
+      <div class="stat-label">Data Minuman</div>
+      <div class="stat-value">{{ minuman }}</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-green">⚙️</div>
+    <div class="stat-body">
+      <div class="stat-label">Metode</div>
+      <div class="stat-value stat-value-sm">Linear Reg &<br>Random Forest</div>
+    </div>
+  </div>
+</div>
+
+<!-- WELCOME -->
+<div class="welcome-card">
+  <div class="welcome-text">
+    <h2>Prediksi Penjualan Makanan dan Minuman</h2>
+    <p class="welcome-sub">Restoran Ayam Serayu Bekasi</p>
+    <p class="welcome-desc">
+      Sistem ini memprediksi penjualan <strong>Makanan</strong> dan <strong>Minuman</strong>
+      secara terpisah menggunakan metode <em>Linear Regression</em> dan
+      <em>Random Forest Regression</em>, sehingga pengelolaan stok lebih efisien dan akurat.
+    </p>
+    <a href="{{ url_for('prediksi') }}" class="btn btn-green">🚀 Mulai Prediksi</a>
+  </div>
+  <div class="welcome-emojis">
+    <span style="font-size:72px">🍗</span>
+    <span style="font-size:64px">🥤</span>
+  </div>
+</div>
+
+{% if last_result %}
+<!-- HASIL PREDIKSI TERAKHIR -->
+<div class="section-title">📊 Hasil Prediksi Terakhir</div>
+<div class="kat-grid">
+  {% for kat, res in last_result.items() %}
+  <div class="panel kat-panel {{ 'panel-makanan' if kat=='makanan' else 'panel-minuman' }}">
+    <div class="panel-header">
+      <span>{{ '🍗' if kat=='makanan' else '🥤' }}</span>
+      <strong>{{ res.kategori }}</strong>
+      <span class="badge-best {% if res.best_model=='Linear Regression' %}badge-lr{% else %}badge-rf{% endif %}">
+        🏆 {{ res.best_model }}
+      </span>
+    </div>
+    <div class="eval-mini-grid">
+      <div class="eval-mini"><span>MAE (LR)</span><strong>{{ res.mae_lr }}</strong></div>
+      <div class="eval-mini"><span>RMSE (LR)</span><strong>{{ res.rmse_lr }}</strong></div>
+      <div class="eval-mini"><span>MAE (RF)</span><strong>{{ res.mae_rf }}</strong></div>
+      <div class="eval-mini"><span>RMSE (RF)</span><strong>{{ res.rmse_rf }}</strong></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- GRAFIK TREN -->
+<div class="section-title">📈 Tren Penjualan Harian</div>
+<div class="dashboard-grid">
+  <div class="panel">
+    <div class="panel-header"><span class="dot dot-orange"></span><strong>🍗 Tren Makanan</strong></div>
+    <div class="chart-title">Jumlah Item Makanan per Hari</div>
+    <div class="chart-wrap"><canvas id="chartMakanan"></canvas></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><span class="dot dot-blue"></span><strong>🥤 Tren Minuman</strong></div>
+    <div class="chart-title">Jumlah Item Minuman per Hari</div>
+    <div class="chart-wrap"><canvas id="chartMinuman"></canvas></div>
+  </div>
+</div>
+
+<!-- INPUT CEPAT -->
+<div class="section-title">➕ Input Data Cepat</div>
+<div class="dashboard-grid">
+  <div class="panel">
+    <div class="panel-header"><span class="dot dot-green"></span><strong>Form Input</strong></div>
+    <form method="POST" action="{{ url_for('save_data') }}" class="input-form">
+      <div class="form-row">
+        <label class="form-label">📅 Tanggal</label>
+        <input type="date" name="tanggal" id="tgl-inp" class="form-control" required/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">📂 Kategori</label>
+        <select name="kategori" id="kat-sel" class="form-control form-select" onchange="updateProduk()">
+          <option value="Makanan">🍗 Makanan</option>
+          <option value="Minuman">🥤 Minuman</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">🍽️ Nama Produk</label>
+        <select name="produk" id="produk-sel" class="form-control form-select"></select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">🔢 Jumlah</label>
+        <input type="number" name="jumlah" min="0" value="0" class="form-control"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">💰 Harga (Rp)</label>
+        <input type="number" name="harga" min="0" value="0" class="form-control"/>
+      </div>
+      <button type="submit" class="btn btn-green">💾 Simpan</button>
+    </form>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><span class="dot dot-orange"></span><strong>Upload CSV POS Pawoon</strong></div>
+    <form method="POST" action="{{ url_for('upload_csv') }}" enctype="multipart/form-data">
+      <div class="upload-zone" id="uz" onclick="document.getElementById('csv-f').click()">
+        <div class="upload-icon">📂</div>
+        <p>Klik untuk pilih file CSV</p>
+        <input type="file" name="csv_file" id="csv-f" accept=".csv" class="upload-file-input"
+               onchange="document.getElementById('fn').textContent=this.files[0].name"/>
+        <span class="upload-file-name" id="fn">Belum ada file dipilih</span>
+      </div>
+      <button type="submit" class="btn btn-dark mt-8" style="width:100%">⬆ Upload & Proses</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const produkMakanan = {{ produk_makanan|tojson }};
+const produkMinuman = {{ produk_minuman|tojson }};
+
+// Set default produk list
+function updateProduk() {
+  const kat = document.getElementById('kat-sel').value;
+  const sel = document.getElementById('produk-sel');
+  const list = kat === 'Makanan' ? produkMakanan : produkMinuman;
+  sel.innerHTML = list.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+updateProduk();
+document.getElementById('tgl-inp').value = new Date().toISOString().split('T')[0];
+
+// Chart helper
+function makeLineChart(id, labels, data, color, label) {
+  const ctx = document.getElementById(id).getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels.length ? labels : ['—'],
+      datasets: [{
+        label: label,
+        data: data.length ? data : [0],
+        borderColor: color,
+        backgroundColor: color + '18',
+        borderWidth: 2.5,
+        pointRadius: 4,
+        pointBackgroundColor: color,
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: { ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+}
+
+const dm = {{ chart_makanan|safe }};
+const dn = {{ chart_minuman|safe }};
+makeLineChart('chartMakanan', dm.map(d=>d.tanggal), dm.map(d=>d.total), '#FF6F00', 'Makanan');
+makeLineChart('chartMinuman', dn.map(d=>d.tanggal), dn.map(d=>d.total), '#1565C0', 'Minuman');
+</script>
+{% endblock %}

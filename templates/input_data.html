@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=True) %}
+  {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">{{ message }}</div>
+  {% endfor %}
+{% endwith %}
+
+<div class="page-header">
+  <h2>📝 Input Data Penjualan</h2>
+  <p>Tambah data <strong>Makanan</strong> dan <strong>Minuman</strong> secara manual atau upload CSV POS Pawoon</p>
+</div>
+
+<div class="stat-cards" style="margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue">📋</div>
+    <div class="stat-body"><div class="stat-label">Total Data</div><div class="stat-value">{{ total }}</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#FFF3E0;font-size:26px">🍗</div>
+    <div class="stat-body"><div class="stat-label">Makanan</div><div class="stat-value">{{ makanan }}</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#E3F2FD;font-size:26px">🥤</div>
+    <div class="stat-body"><div class="stat-label">Minuman</div><div class="stat-value">{{ minuman }}</div></div>
+  </div>
+</div>
+
+<div class="dashboard-grid">
+  <!-- FORM INPUT -->
+  <div class="panel">
+    <div class="panel-header"><span class="dot dot-green"></span><strong>Form Input Data</strong></div>
+    <form method="POST" action="{{ url_for('save_data') }}" class="input-form">
+      <div class="form-row">
+        <label class="form-label">📅 Tanggal</label>
+        <input type="date" name="tanggal" value="{{ today }}" class="form-control" required/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">📂 Kategori</label>
+        <select name="kategori" id="kat-sel" class="form-control form-select" onchange="updateProduk()">
+          <option value="Makanan">🍗 Makanan</option>
+          <option value="Minuman">🥤 Minuman</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">🍽️ Nama Produk</label>
+        <select name="produk" id="produk-sel" class="form-control form-select"></select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">🔢 Jumlah Produk</label>
+        <input type="number" name="jumlah" min="0" value="0" class="form-control"/>
+      </div>
+      <div class="form-row">
+        <label class="form-label">💰 Harga (Rp)</label>
+        <input type="number" name="harga" min="0" value="0" class="form-control"/>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-green">💾 Simpan Data</button>
+        <a href="{{ url_for('export_data') }}" class="btn btn-outline">📥 Export Excel</a>
+      </div>
+    </form>
+
+    <hr class="divider"/>
+
+    <div class="panel-header"><span class="dot dot-orange"></span><strong>Upload CSV POS Pawoon</strong></div>
+    <form method="POST" action="{{ url_for('upload_csv') }}" enctype="multipart/form-data">
+      <div class="upload-zone" id="uz" onclick="document.getElementById('csv-f').click()">
+        <div class="upload-icon">📂</div>
+        <p>Klik untuk pilih file CSV</p>
+        <input type="file" name="csv_file" id="csv-f" accept=".csv" class="upload-file-input"
+               onchange="document.getElementById('fn').textContent=this.files[0]?.name||''"/>
+        <span class="upload-file-name" id="fn">Belum ada file dipilih</span>
+      </div>
+      <button type="submit" class="btn btn-dark mt-8" style="width:100%">⬆ Upload & Proses CSV</button>
+    </form>
+
+    <hr class="divider"/>
+
+    <div id="reset-wrap">
+      <button type="button" class="btn btn-red" style="width:100%"
+              onclick="document.getElementById('reset-wrap').innerHTML=document.getElementById('reset-confirm-tpl').innerHTML">
+        🗑️ Reset Semua Data
+      </button>
+    </div>
+    <template id="reset-confirm-tpl">
+      <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:12px;margin-top:0">
+        <p style="margin:0 0 10px;font-weight:600;color:#856404">⚠️ Hapus semua data? Tindakan ini tidak dapat dibatalkan!</p>
+        <div style="display:flex;gap:8px">
+          <form method="POST" action="{{ url_for('reset_data') }}" style="flex:1">
+            <button type="submit" class="btn btn-red" style="width:100%">Ya, Hapus Semua</button>
+          </form>
+          <button type="button" class="btn btn-outline" style="flex:1"
+                  onclick="location.reload()">Batal</button>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- TABEL DATA -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="dot dot-blue"></span>
+      <strong>Data Tersimpan (100 terbaru)</strong>
+      <span class="badge-count">{{ total }} record</span>
+    </div>
+    {% if rows %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>No</th><th>Tanggal</th><th>Produk</th><th>Kategori</th><th>Jumlah</th><th>Harga (Rp)</th></tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.id }}</td>
+            <td>{{ row.tanggal }}</td>
+            <td>{{ row.produk }}</td>
+            <td>
+              <span class="badge-kategori {{ 'badge-makanan' if row.kategori|lower=='makanan' else 'badge-minuman' }}">
+                {{ '🍗' if row.kategori|lower=='makanan' else '🥤' }} {{ row.kategori }}
+              </span>
+            </td>
+            <td><span class="badge-jumlah">{{ row.jumlah }}</span></td>
+            <td>{{ '{:,}'.format(row.harga) if row.harga else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <span style="font-size:48px">📭</span>
+      <p>Belum ada data.<br>Input manual atau upload CSV.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const produkMakanan = {{ produk_makanan|tojson }};
+const produkMinuman = {{ produk_minuman|tojson }};
+function updateProduk() {
+  const kat = document.getElementById('kat-sel').value;
+  const sel = document.getElementById('produk-sel');
+  const list = kat === 'Makanan' ? produkMakanan : produkMinuman;
+  sel.innerHTML = list.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+updateProduk();
+</script>
+{% endblock %}

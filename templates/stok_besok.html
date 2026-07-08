@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-header">
+  <h2>📦 Prediksi Stok Per Item</h2>
+  <p>
+    Data terakhir: <strong>{{ last_date or '—' }}</strong> —
+    Periode prediksi: <strong>{{ next_date }}</strong>
+    {% if horizon > 1 %} s/d <strong>{{ end_date }}</strong>{% endif %}
+  </p>
+</div>
+
+<!-- ── TOGGLE HORIZON ── -->
+<div class="horizon-bar" style="margin-bottom:20px">
+  {% for h, label, icon in [(1,'Besok','📅'), (7,'1 Minggu','📆'), (30,'1 Bulan','🗓️')] %}
+  <a href="{{ url_for('stok_besok', horizon=h, buffer=buffer_pct, n_estimators=n_estimators) }}"
+     class="horizon-btn {% if horizon == h %}horizon-btn-active{% endif %}">
+    {{ icon }} {{ label }}
+  </a>
+  {% endfor %}
+</div>
+
+<!-- ── CONFIG ── -->
+<form method="GET" action="{{ url_for('stok_besok') }}" class="panel stok-config-form" style="margin-bottom:20px">
+  <input type="hidden" name="horizon" value="{{ horizon }}"/>
+  <div class="panel-header">
+    <span class="dot dot-green"></span>
+    <strong>Konfigurasi</strong>
+    <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">
+      Mode aktif:
+      <strong style="color:var(--green-dark)">{{ horizon_label }}</strong>
+      ({{ next_date }}{% if horizon > 1 %} – {{ end_date }}{% endif %})
+    </span>
+  </div>
+  <div class="stok-config-grid">
+    <div class="form-row">
+      <label class="form-label">Buffer Stok (%)</label>
+      <input type="range" name="buffer" min="0" max="50" value="{{ buffer_pct }}"
+             class="slider" oninput="document.getElementById('buf-val').textContent=this.value+'%'"/>
+      <div class="slider-labels"><span>0%</span><span>25%</span><span>50%</span></div>
+      <div class="slider-current">Nilai saat ini: <strong id="buf-val">{{ buffer_pct }}%</strong></div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Jumlah Pohon Random Forest</label>
+      <input type="range" name="n_estimators" min="10" max="200" step="10" value="{{ n_estimators }}"
+             class="slider" oninput="document.getElementById('nest-val').textContent=this.value"/>
+      <div class="slider-labels"><span>10</span><span>100</span><span>200</span></div>
+      <div class="slider-current">Nilai saat ini: <strong id="nest-val">{{ n_estimators }}</strong> pohon</div>
+    </div>
+  </div>
+  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <button type="submit" class="btn btn-green">🔄 Hitung Ulang</button>
+    <a href="{{ url_for('export_stok_besok', horizon=horizon, buffer=buffer_pct, n_estimators=n_estimators) }}"
+       class="btn btn-dark">📥 Export Excel</a>
+    <span style="font-size:12px;color:var(--text-muted)">
+      ML = data ≥ 10 hari. Horizon > 1 hari menggunakan prediksi rekursif.
+    </span>
+  </div>
+</form>
+
+<!-- ── SUMMARY CARDS ── -->
+<div class="stat-cards" style="margin-bottom:20px">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#FFF3E0;font-size:26px">🍗</div>
+    <div class="stat-body">
+      <div class="stat-label">Stok Makanan – {{ horizon_label }}</div>
+      <div class="stat-value">{{ total_stok_makanan }}</div>
+      <div style="font-size:11px;color:var(--text-muted)">{{ hasil.makanan|length }} item</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:#E3F2FD;font-size:26px">🥤</div>
+    <div class="stat-body">
+      <div class="stat-label">Stok Minuman – {{ horizon_label }}</div>
+      <div class="stat-value">{{ total_stok_minuman }}</div>
+      <div style="font-size:11px;color:var(--text-muted)">{{ hasil.minuman|length }} item</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-green">📦</div>
+    <div class="stat-body">
+      <div class="stat-label">Total Stok – {{ horizon_label }}</div>
+      <div class="stat-value">{{ total_stok_makanan + total_stok_minuman }}</div>
+      <div style="font-size:11px;color:var(--text-muted)">+{{ buffer_pct }}% buffer</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue">🗓️</div>
+    <div class="stat-body">
+      <div class="stat-label">Periode</div>
+      <div class="stat-value stat-value-sm">{{ next_date }}</div>
+      {% if horizon > 1 %}
+      <div style="font-size:11px;color:var(--text-muted)">s/d {{ end_date }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ── TABEL PER KATEGORI ── -->
+{% for kat_key, kat_label, icon, border_color in [
+    ('makanan','Makanan','🍗','#FF6F00'),
+    ('minuman','Minuman','🥤','#1565C0')
+] %}
+{% set items = hasil[kat_key] %}
+<div class="section-title">{{ icon }} Stok {{ kat_label }} – {{ items|length }} item</div>
+
+{% if items %}
+<div class="panel" style="margin-bottom:28px;border-top:4px solid {{ border_color }}">
+  <div class="panel-header">
+    <span class="dot {{ 'dot-orange' if kat_key=='makanan' else 'dot-blue' }}"></span>
+    <strong>Rencana Stok {{ kat_label }}</strong>
+    <span class="badge-count" style="margin-left:auto">
+      Total stok: {{ items|sum(attribute='stok_anjuran') }}
+    </span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Nama Produk</th>
+          <th style="text-align:center">Terjual Terakhir</th>
+          <th style="text-align:center">Rata² 7 Hari</th>
+          {% if horizon == 1 %}
+          <th style="text-align:center">Prediksi LR</th>
+          <th style="text-align:center">Prediksi RF</th>
+          <th style="text-align:center">Prediksi Besok</th>
+          {% else %}
+          <th style="text-align:center">Total Prediksi ({{ horizon }} hr)</th>
+          <th style="text-align:center">Avg / Hari</th>
+          {% endif %}
+          <th style="text-align:center">Stok Anjuran (+{{ buffer_pct }}%)</th>
+          <th style="text-align:center">Metode</th>
+          <th style="text-align:center">Data</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        {% set stok = item.stok_anjuran %}
+        <tr>
+          <td style="color:var(--text-muted)">{{ loop.index }}</td>
+          <td><strong>{{ item.produk }}</strong></td>
+          <td style="text-align:center">
+            <span class="badge-jumlah">{{ item.terjual_terakhir }}</span>
+          </td>
+          <td style="text-align:center;color:var(--text-muted)">{{ item.rata_7hari }}</td>
+          {% if horizon == 1 %}
+          <td style="text-align:center;color:var(--text-muted)">{{ item.pred_lr }}</td>
+          <td style="text-align:center;color:var(--text-muted)">{{ item.pred_rf }}</td>
+          <td style="text-align:center"><strong>{{ item.prediksi }}</strong></td>
+          {% else %}
+          <td style="text-align:center"><strong>{{ item.prediksi }}</strong></td>
+          <td style="text-align:center;color:var(--text-muted)">{{ item.avg_per_hari }}</td>
+          {% endif %}
+          <td style="text-align:center">
+            {% if stok >= 500 %}
+              <span class="stok-badge stok-red">{{ stok }}</span>
+            {% elif stok >= 200 %}
+              <span class="stok-badge stok-orange">{{ stok }}</span>
+            {% elif stok >= 50 %}
+              <span class="stok-badge stok-yellow">{{ stok }}</span>
+            {% else %}
+              <span class="stok-badge stok-green">{{ stok }}</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center">
+            {% if item.metode == 'ML' %}
+              <span class="ftag ftag-lag">ML</span>
+            {% else %}
+              <span class="ftag ftag-temporal">Avg</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center;font-size:12px;color:var(--text-muted)">{{ item.total_data }} hr</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-note">
+    Data terakhir: {{ items[0].last_date }} |
+    Periode stok: {{ items[0].next_date }}{% if horizon > 1 %} – {{ items[0].end_date }}{% endif %} |
+    Buffer +{{ buffer_pct }}%
+  </div>
+</div>
+{% else %}
+<div class="panel" style="margin-bottom:28px">
+  <div class="empty-state">
+    <div style="font-size:40px">{{ icon }}</div>
+    <p>Tidak ada data {{ kat_label }}.</p>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+<!-- ── KETERANGAN ── -->
+<div class="panel" style="background:var(--green-pale);border-color:#C8E6C9;margin-bottom:20px">
+  <div class="panel-header"><strong>ℹ️ Cara Membaca</strong></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:13px">
+    <div><strong>Besok</strong><br><span style="color:var(--text-muted)">Prediksi 1 hari ke depan menggunakan RF dengan fitur lag & pola hari.</span></div>
+    <div><strong>1 Minggu</strong><br><span style="color:var(--text-muted)">Total stok 7 hari ke depan. Prediksi rekursif hari per hari, hasil dijumlahkan.</span></div>
+    <div><strong>1 Bulan</strong><br><span style="color:var(--text-muted)">Total stok 30 hari ke depan. Prediksi rekursif, cocok untuk pembelian bahan baku.</span></div>
+    <div><strong>Avg / Hari</strong><br><span style="color:var(--text-muted)">Rata-rata prediksi per hari dalam periode. Berguna untuk perencanaan harian.</span></div>
+    <div><strong>Stok Anjuran</strong><br><span style="color:var(--text-muted)">Total prediksi × (1 + buffer%). Stok pengaman untuk mengantisipasi lonjakan.</span></div>
+    <div>
+      <strong>Kode Warna</strong><br>
+      <span class="stok-badge stok-red" style="font-size:11px">≥500</span>
+      <span class="stok-badge stok-orange" style="font-size:11px">≥200</span>
+      <span class="stok-badge stok-yellow" style="font-size:11px">≥50</span>
+      <span class="stok-badge stok-green" style="font-size:11px">&lt;50</span>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

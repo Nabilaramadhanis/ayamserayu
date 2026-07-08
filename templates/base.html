@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Prediksi Penjualan Makanan & Minuman – Ayam Serayu Bekasi</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-emoji">🍗</span>
+      <span class="sidebar-emoji">🥤</span>
+      <div class="sidebar-title-wrap">
+        <span class="sidebar-title">SISTEM PREDIKSI PENJUALAN</span>
+        <span class="sidebar-sub">MAKANAN DAN MINUMAN</span>
+        <span class="sidebar-sub">RESTORAN AYAM SERAYU BEKASI</span>
+      </div>
+      <span class="sidebar-emoji">🍟</span>
+    </div>
+    <div class="sidebar-address">
+      📍 Jl. Raya Pekayon No.2, Pekayon Jaya, Kec. Bekasi Selatan, Kota Bekasi, Jawa Barat 17148
+    </div>
+    <div class="sidebar-menu-label">MENU</div>
+    <a href="{{ url_for('dashboard') }}"  class="sidebar-link {% if active=='dashboard' %}active{% endif %}"><span>📊</span> Dashboard</a>
+    <a href="{{ url_for('input_data') }}" class="sidebar-link {% if active=='input' %}active{% endif %}"><span>📝</span> Input Data</a>
+    <a href="{{ url_for('prediksi') }}"   class="sidebar-link {% if active=='prediksi' %}active{% endif %}"><span>⚙️</span> Proses Prediksi</a>
+    <a href="{{ url_for('hasil') }}"      class="sidebar-link {% if active=='hasil' %}active{% endif %}"><span>📁</span> Hasil</a>
+    <a href="{{ url_for('stok_besok') }}" class="sidebar-link {% if active=='stok' %}active{% endif %}"><span>📦</span> Prediksi Stok</a>
+  </aside>
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

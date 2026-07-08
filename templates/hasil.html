@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="page-header">
+  <h2>📁 Hasil Prediksi Penjualan Makanan & Minuman</h2>
+  <p>Perbandingan Linear Regression vs Random Forest — per kategori</p>
+</div>
+
+<!-- RINGKASAN PER KATEGORI -->
+<div class="kat-grid">
+  {% for kat, res in result.items() %}
+  <div class="panel kat-panel {{ 'panel-makanan' if kat=='makanan' else 'panel-minuman' }}">
+    <div class="panel-header" style="font-size:16px">
+      <span style="font-size:24px">{{ '🍗' if kat=='makanan' else '🥤' }}</span>
+      <strong>{{ res.kategori }}</strong>
+      <span class="badge-best {{ 'badge-lr' if res.best_model=='Linear Regression' else 'badge-rf' }}">
+        🏆 {{ res.best_model }}
+      </span>
+    </div>
+    <div class="eval-mini-grid">
+      <div class="eval-mini"><span>MAE – LR</span><strong>{{ res.mae_lr }}</strong></div>
+      <div class="eval-mini"><span>RMSE – LR</span><strong>{{ res.rmse_lr }}</strong></div>
+      <div class="eval-mini"><span>MAE – RF</span><strong>{{ res.mae_rf }}</strong></div>
+      <div class="eval-mini"><span>RMSE – RF</span><strong>{{ res.rmse_rf }}</strong></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- EXPORT -->
+<div style="margin:12px 0 20px;text-align:right">
+  <a href="{{ url_for('export_hasil') }}" class="btn btn-green">📥 Export Excel (Semua Kategori)</a>
+</div>
+
+<!-- GRAFIK + TABEL PER KATEGORI -->
+{% for kat, res in result.items() %}
+{% set label = res.kategori %}
+{% set icon  = '🍗' if kat=='makanan' else '🥤' %}
+{% set color_lr = '#FF6F00' if kat=='makanan' else '#1565C0' %}
+{% set color_rf = '#2E7D32' %}
+
+<div class="section-title">{{ icon }} Hasil Prediksi – {{ label }}</div>
+
+<!-- EVAL CARDS -->
+<div class="eval-grid" style="margin-bottom:16px">
+  <div class="eval-card {{ 'eval-lr' }}">
+    <h3>🔵 Linear Regression – {{ label }}</h3>
+    <div class="eval-row"><span>MAE</span><strong>{{ res.mae_lr }}</strong></div>
+    <div class="eval-row"><span>RMSE</span><strong>{{ res.rmse_lr }}</strong></div>
+    {% if res.best_model=='Linear Regression' %}
+    <div class="eval-winner">🏆 Model Terbaik untuk {{ label }}</div>
+    {% endif %}
+  </div>
+  <div class="eval-card {{ 'eval-rf' }}">
+    <h3>🌳 Random Forest – {{ label }}</h3>
+    <div class="eval-row"><span>MAE</span><strong>{{ res.mae_rf }}</strong></div>
+    <div class="eval-row"><span>RMSE</span><strong>{{ res.rmse_rf }}</strong></div>
+    {% if res.best_model=='Random Forest' %}
+    <div class="eval-winner">🏆 Model Terbaik untuk {{ label }}</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- GRAFIK -->
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-header">
+    <span class="dot {{ 'dot-orange' if kat=='makanan' else 'dot-blue' }}"></span>
+    <strong>Grafik Aktual vs Prediksi – {{ label }}</strong>
+  </div>
+  <div class="chart-wrap-lg">
+    <canvas id="chart_{{ kat }}"></canvas>
+  </div>
+  <div class="chart-legend" style="margin-top:10px">
+    <span class="legend-dot" style="background:{{ color_lr }}"></span> Aktual &nbsp;
+    <span class="legend-dot" style="background:#888;border:2px dashed #FF6F00"></span> LR &nbsp;
+    <span class="legend-dot" style="background:#888;border:2px dashed #2E7D32"></span> RF
+  </div>
+</div>
+
+<!-- PENJELASAN TABEL -->
+<div class="info-box" style="margin-bottom:12px;background:#FFF8E1;border-color:#FFE082">
+  <div style="display:flex;gap:10px;align-items:flex-start;font-size:13px">
+    <span style="font-size:20px;flex-shrink:0">💡</span>
+    <div>
+      <strong>Cara membaca tabel ini:</strong>
+      Tabel menguji akurasi model pada <strong>data historis terbaru</strong> (20% data terakhir = test set, urutan waktu).
+      Kolom <strong>Aktual</strong> adalah total {{ label|lower }} yang benar-benar terjual pada tanggal tersebut.
+      Kolom <strong>Prediksi</strong> adalah perkiraan model <em>tanpa melihat nilai aktual hari itu</em> — hanya berdasarkan pola hari-hari sebelumnya.
+      <strong>Error</strong> menunjukkan selisih: positif = aktual lebih tinggi, negatif = prediksi terlalu tinggi.
+      <em>Semakin kecil error, semakin akurat model.</em>
+    </div>
+  </div>
+</div>
+
+<!-- TABEL DETAIL -->
+<div class="panel" style="margin-bottom:28px">
+  <div class="panel-header">
+    <span class="dot dot-green"></span>
+    <strong>Detail Prediksi vs Aktual – {{ label }}</strong>
+    <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">
+      Test set: {{ res.y_test|length }} hari terakhir
+    </span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Tanggal</th>
+          <th style="text-align:right">Aktual</th>
+          <th style="text-align:right">Prediksi LR</th>
+          <th style="text-align:right">Error LR</th>
+          <th style="text-align:right">Prediksi RF</th>
+          <th style="text-align:right">Error RF</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in range(res.y_test|length) %}
+        {% set err_lr = res.y_test[i] - res.y_pred_lr[i] %}
+        {% set err_rf = res.y_test[i] - res.y_pred_rf[i] %}
+        {% set threshold = (res.y_test[i] * 0.2)|int %}
+        <tr>
+          <td style="color:var(--text-muted)">{{ loop.index }}</td>
+          <td><strong>{{ res.tanggal_test[i] if res.tanggal_test else '—' }}</strong></td>
+          <td style="text-align:right"><strong>{{ res.y_test[i] }}</strong></td>
+          <td style="text-align:right">{{ res.y_pred_lr[i] }}</td>
+          <td style="text-align:right" class="{{ 'error-low' if err_lr|abs <= threshold else 'error-high' }}">
+            {{ '%+d' % err_lr }}
+          </td>
+          <td style="text-align:right">{{ res.y_pred_rf[i] }}</td>
+          <td style="text-align:right" class="{{ 'error-low' if err_rf|abs <= threshold else 'error-high' }}">
+            {{ '%+d' % err_rf }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-note">
+    Aktual = total item {{ label|lower }} terjual per hari |
+    Prediksi = estimasi model berdasarkan data hari-hari sebelumnya |
+    Error hijau = selisih ≤ 20% dari aktual
+  </div>
+</div>
+
+{% endfor %}
+
+<!-- ═══════════════════════════════════════
+     PREDIKSI STOK BESOK PER ITEM
+════════════════════════════════════════ -->
+<div class="section-title" style="margin-top:32px">📦 Prediksi Stok Besok – Per Item
+  {% if next_date %}<span style="font-size:13px;font-weight:400;color:var(--text-muted)">untuk {{ next_date }}</span>{% endif %}
+</div>
+
+{% for kat_key, kat_label, icon, border_color in [
+    ('makanan','Makanan','🍗','#FF6F00'),
+    ('minuman','Minuman','🥤','#1565C0')
+] %}
+{% set items = stok_items[kat_key] %}
+{% if items %}
+<div class="panel" style="margin-bottom:24px;border-top:4px solid {{ border_color }}">
+  <div class="panel-header">
+    <span style="font-size:18px">{{ icon }}</span>
+    <strong>Stok {{ kat_label }} – {{ items|length }} item</strong>
+    <span class="badge-count" style="margin-left:auto">
+      Total: {{ items|sum(attribute='stok_anjuran') }} porsi
+    </span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Nama Produk</th>
+          <th style="text-align:center">Terjual Hari Ini</th>
+          <th style="text-align:center">Rata-rata 7 Hari</th>
+          <th style="text-align:center">Prediksi Besok</th>
+          <th style="text-align:center">Stok Anjuran (+15%)</th>
+          <th style="text-align:center">Metode</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        {% set stok = item.stok_anjuran %}
+        <tr>
+          <td style="color:var(--text-muted)">{{ loop.index }}</td>
+          <td><strong>{{ item.produk }}</strong></td>
+          <td style="text-align:center">
+            <span class="badge-jumlah">{{ item.terjual_terakhir }}</span>
+          </td>
+          <td style="text-align:center;color:var(--text-muted)">{{ item.rata_7hari }}</td>
+          <td style="text-align:center"><strong>{{ item.prediksi }}</strong></td>
+          <td style="text-align:center">
+            {% if stok >= 100 %}
+              <span class="stok-badge stok-red">{{ stok }}</span>
+            {% elif stok >= 50 %}
+              <span class="stok-badge stok-orange">{{ stok }}</span>
+            {% elif stok >= 20 %}
+              <span class="stok-badge stok-yellow">{{ stok }}</span>
+            {% else %}
+              <span class="stok-badge stok-green">{{ stok }}</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center">
+            {% if item.metode == 'ML' %}
+              <span class="ftag ftag-lag">ML</span>
+            {% else %}
+              <span class="ftag ftag-temporal">Avg</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-note">
+    Data terakhir: {{ items[0].last_date }} → Prediksi untuk: {{ items[0].next_date }} |
+    <a href="{{ url_for('stok_besok') }}" style="color:var(--green-dark);font-weight:600">Lihat halaman lengkap →</a>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% endblock %}
+{% block scripts %}
+<script>
+const result = {{ result_json|safe }};
+
+const katColors = {
+  makanan: { aktual: '#FF6F00', lr: '#FFAB40', rf: '#2E7D32' },
+  minuman: { aktual: '#1565C0', lr: '#42A5F5', rf: '#2E7D32' },
+};
+
+Object.entries(result).forEach(([kat, res]) => {
+  const c   = katColors[kat] || katColors.makanan;
+  const ctx = document.getElementById('chart_' + kat).getContext('2d');
+  const lbl = Array.from({length: res.y_test.length}, (_, i) => 'Data ' + (i+1));
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: lbl,
+      datasets: [
+        {
+          label: 'Aktual',
+          data: res.y_test,
+          borderColor: c.aktual,
+          backgroundColor: c.aktual + '15',
+          borderWidth: 3, pointRadius: 6, pointBackgroundColor: c.aktual,
+          tension: 0.3, fill: true,
+        },
+        {
+          label: 'Linear Regression',
+          data: res.y_pred_lr,
+          borderColor: '#FF6F00',
+          backgroundColor: 'transparent',
+          borderWidth: 2.5, borderDash: [6,3],
+          pointRadius: 5, pointBackgroundColor: '#FF6F00', pointStyle: 'rect',
+          tension: 0.3,
+        },
+        {
+          label: 'Random Forest',
+          data: res.y_pred_rf,
+          borderColor: '#2E7D32',
+          backgroundColor: 'transparent',
+          borderWidth: 2.5, borderDash: [3,3],
+          pointRadius: 5, pointBackgroundColor: '#2E7D32', pointStyle: 'triangle',
+          tension: 0.3,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top' },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(0,0,0,0.04)' } },
+        y: { grid: { color: 'rgba(0,0,0,0.04)' }, title: { display: true, text: 'Jumlah Item' } }
+      }
+    }
+  });
+});
+</script>
+{% endblock %}
